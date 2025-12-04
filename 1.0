@@ -1,53 +1,62 @@
 --=========================================================
 --  BSS Token Teleport UI
---  Левое меню + сабтабы + iOS-тумблеры + сворачивание в кружок
+--  Вкладки: Автосбор / Игрок / Настройки
+--  Сворачивание в кружок, спидхак, копирование ТГ-ссылки
 --=========================================================
+
+---------------------- НАСТРОЙКИ --------------------------
+
+local TELEGRAM_LINK = "https://https://t.me/BssShota" -- <=== ЗАМЕНИ НА СВОЮ ССЫЛКУ
 
 ---------------------- НАСТРОЙКИ ТОКЕНОВ ------------------
 
 local TOKEN_TYPES = {
-    Glitter = {
-        id    = "2542899798",
-        label = "Глиттер",
-    },
-    BlueBoost = {
-        id    = "1442863423",
-        label = "Синий буст",
-    },
-    PollenMark = {
-        id    = "2499540966",
-        label = "Метка пыльцы",
-    },
-    Focus = {
-        id    = "1629649299",
-        label = "Фокус",
-    },
-    Glue = {
-        id    = "2504978518",
-        label = "Клей",
-    },
-    Honey = {
-        id    = "1472135114",
-        label = "Мёд",
-    },
-    Bombs = {
-        id    = "1442725244",
-        label = "R/B/W бомбы",
-    },
-    HoneyMark = {
-        id    = "2499514197",
-        label = "Метка переработки мёда",
-    },
+    Glitter = { id = "2542899798", label = "Глиттер" },
+    BlueBoost = { id = "1442863423", label = "Синий буст" },
+    PollenMark = { id = "2499540966", label = "Метка пыльцы" },
+    Focus = { id = "1629649299", label = "Фокус" },
+    Glue = { id = "2504978518", label = "Клей" },
+    Honey = { id = "1472135114", label = "Мёд" },
+    Bombs = { id = "1442725244", label = "R/B/W бомбы" },
+    HoneyMark = { id = "2499514197", label = "Метка переработки мёда" },
 }
 
 local collectiblesName = "Collectibles"
 
----------------------- ЛОГИКА ТЕЛЕПОРТА -------------------
+---------------------- СЕРВИСЫ ----------------------------
 
 local Players      = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UIS          = game:GetService("UserInputService")
+local StarterGui   = game:GetService("StarterGui")
+
 local lp           = Players.LocalPlayer
+
+---------------------- ХЕЛПЕРЫ ----------------------------
+
+local function safeNotify(text)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = "BeeSSshota",
+            Text = text,
+            Duration = 3
+        })
+    end)
+end
+
+local function copyToClipboard(text)
+    if setclipboard then
+        setclipboard(text)
+    elseif toclipboard then
+        toclipboard(text)
+    else
+        safeNotify("Клиент не поддерживает копирование :(")
+        return
+    end
+    safeNotify("Ссылка скопирована")
+end
+
+---------------------- ЛОГИКА ТЕЛЕПОРТА -------------------
 
 local function getHRP()
     local char = lp.Character or lp.CharacterAdded:Wait()
@@ -181,6 +190,33 @@ local function setTypeEnabled(tokenKey, on)
     end
 end
 
+---------------------- СПИДХАК ----------------------------
+
+local humanoid
+local baseWalkSpeed = 16
+local speedDelta = 0 -- от 0 до 90, итог = baseWalkSpeed + speedDelta
+
+local function updateHumanoid()
+    local char = lp.Character or lp.CharacterAdded:Wait()
+    humanoid = char:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        baseWalkSpeed = humanoid.WalkSpeed
+    end
+end
+
+local function applySpeed()
+    if humanoid then
+        humanoid.WalkSpeed = baseWalkSpeed + speedDelta
+    end
+end
+
+updateHumanoid()
+lp.CharacterAdded:Connect(function()
+    task.wait(1)
+    updateHumanoid()
+    applySpeed()
+end)
+
 -------------------------- UI -----------------------------
 
 pcall(function()
@@ -280,7 +316,7 @@ local logoLabel = create("TextLabel", {
     Position = UDim2.new(0, 0, 0, 4),
     BackgroundTransparency = 1,
     Font = Enum.Font.GothamBold,
-    Text = "Shotacon\nTools",
+    Text = "BeeSSshota",
     TextSize = 18,
     TextColor3 = Color3.fromRGB(200, 210, 255),
     TextYAlignment = Enum.TextYAlignment.Top,
@@ -300,8 +336,8 @@ local sideList = create("UIListLayout", {
 }, sidebarButtonsFrame)
 
 local MAIN_TABS = {
-    { key = "autos", label = "Автосбор" },
-    { key = "future1", label = "Будущее 1", disabled = true },
+    { key = "autos",  label = "Автосбор" },
+    { key = "player", label = "Игрок"   },
     { key = "future2", label = "Будущее 2", disabled = true },
 }
 
@@ -361,6 +397,7 @@ for _, info in ipairs(MAIN_TABS) do
         btn.MouseButton1Click:Connect(function()
             currentMainTab = info.key
             setMainTabVisual()
+            -- обновим панели позже
         end)
     end
 end
@@ -391,9 +428,8 @@ local topList = create("UIListLayout", {
 }, topTabsFrame)
 
 local TOP_TABS = {
-    { key = "tokens", label = "Токены" },
-    { key = "misc", label = "Разное (soon)", disabled = true },
-    { key = "settings", label = "Настройки (soon)", disabled = true },
+    { key = "tokens",   label = "Токены" },
+    { key = "settings", label = "Настройки" },
 }
 
 local currentTopTab = "tokens"
@@ -420,15 +456,10 @@ for _, info in ipairs(TOP_TABS) do
 
     topButtons[info.key] = btn
 
-    if info.disabled then
-        btn.TextColor3 = Color3.fromRGB(90, 95, 130)
-        btn.Active = false
-    else
-        btn.MouseButton1Click:Connect(function()
-            currentTopTab = info.key
-            setTopTabVisual()
-        end)
-    end
+    btn.MouseButton1Click:Connect(function()
+        currentTopTab = info.key
+        setTopTabVisual()
+    end)
 end
 
 setTopTabVisual()
@@ -481,6 +512,7 @@ local contentFrame = create("Frame", {
     BackgroundTransparency = 1,
 }, mainFrame)
 
+-- ПАНЕЛЬ: АВТОСБОР / ТОКЕНЫ
 local tokensPanel = create("Frame", {
     Size = UDim2.new(1, -20, 1, -20),
     Position = UDim2.new(0, 10, 0, 10),
@@ -555,17 +587,14 @@ local function updateStatusLabel()
     statusLabel.Text = "Активно типов: " .. tostring(n)
 end
 
----------------------- СПИСОК ТОКЕНОВ ---------------------
-
 for key, info in pairs(TOKEN_TYPES) do
     local row = create("Frame", {
         Size = UDim2.new(1, 0, 0, 26),
         BackgroundTransparency = 1,
     }, scroll)
 
-    local nameLabel = create("TextLabel", {
+    create("TextLabel", {
         Size = UDim2.new(1, -130, 1, 0),
-        Position = UDim2.new(0, 0, 0, 0),
         BackgroundTransparency = 1,
         Font = Enum.Font.Gotham,
         Text = info.label,
@@ -646,6 +675,193 @@ end
 
 updateStatusLabel()
 
+-- ПАНЕЛЬ: ИГРОК (СПИДХАК)
+local playerPanel = create("Frame", {
+    Size = UDim2.new(1, -20, 1, -20),
+    Position = UDim2.new(0, 10, 0, 10),
+    BackgroundColor3 = Color3.fromRGB(14, 16, 32),
+    BorderSizePixel = 0,
+    Visible = false,
+}, contentFrame)
+create("UICorner", { CornerRadius = UDim.new(0, 12) }, playerPanel)
+
+local playerTitle = create("TextLabel", {
+    Size = UDim2.new(1, -20, 0, 24),
+    Position = UDim2.new(0, 10, 0, 6),
+    BackgroundTransparency = 1,
+    Font = Enum.Font.GothamBold,
+    Text = "Игрок – Спидхак",
+    TextSize = 16,
+    TextColor3 = Color3.fromRGB(220, 225, 255),
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, playerPanel)
+
+local playerSub = create("TextLabel", {
+    Size = UDim2.new(1, -20, 0, 34),
+    Position = UDim2.new(0, 10, 0, 26),
+    BackgroundTransparency = 1,
+    Font = Enum.Font.Gotham,
+    Text = "Ползунок от 0 до 90\n0 = базовая скорость персонажа",
+    TextSize = 12,
+    TextColor3 = Color3.fromRGB(160, 165, 210),
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextYAlignment = Enum.TextYAlignment.Top,
+}, playerPanel)
+
+local speedValueLabel = create("TextLabel", {
+    Size = UDim2.new(1, -20, 0, 20),
+    Position = UDim2.new(0, 10, 0, 70),
+    BackgroundTransparency = 1,
+    Font = Enum.Font.Gotham,
+    Text = "Прибавка скорости: 0 (итог: "..tostring(baseWalkSpeed)..")",
+    TextSize = 13,
+    TextColor3 = Color3.fromRGB(220, 225, 255),
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, playerPanel)
+
+local sliderFrame = create("Frame", {
+    Size = UDim2.new(1, -40, 0, 24),
+    Position = UDim2.new(0, 20, 0, 100),
+    BackgroundTransparency = 1,
+}, playerPanel)
+
+local sliderLine = create("Frame", {
+    Size = UDim2.new(1, 0, 0, 4),
+    Position = UDim2.new(0, 0, 0.5, -2),
+    BackgroundColor3 = Color3.fromRGB(70, 80, 120),
+    BorderSizePixel = 0,
+}, sliderFrame)
+create("UICorner", { CornerRadius = UDim.new(1, 0) }, sliderLine)
+
+local sliderKnob = create("Frame", {
+    Size = UDim2.new(0, 14, 0, 14),
+    Position = UDim2.new(0, -7, 0.5, -7),
+    BackgroundColor3 = Color3.fromRGB(180, 200, 255),
+    BorderSizePixel = 0,
+}, sliderFrame)
+create("UICorner", { CornerRadius = UDim.new(1, 0) }, sliderKnob)
+create("UIStroke", {
+    Color = Color3.fromRGB(230, 235, 255),
+    Thickness = 1,
+}, sliderKnob)
+
+local sliderDragging = false
+local sliderDragStart, sliderKnobStart
+
+local function setSliderFromAlpha(alpha)
+    alpha = math.clamp(alpha, 0, 1)
+    sliderKnob.Position = UDim2.new(alpha, -7, 0.5, -7)
+    speedDelta = math.floor(alpha * 90 + 0.5)
+    applySpeed()
+    speedValueLabel.Text = string.format("Прибавка скорости: %d (итог: %d)", speedDelta, baseWalkSpeed + speedDelta)
+end
+
+setSliderFromAlpha(0)
+
+sliderKnob.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        sliderDragging = true
+        sliderDragStart = input.Position
+        sliderKnobStart = sliderKnob.Position
+    end
+end)
+
+sliderKnob.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        sliderDragging = false
+    end
+end)
+
+sliderFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        local rel = input.Position.X - sliderLine.AbsolutePosition.X
+        local alpha = rel / sliderLine.AbsoluteSize.X
+        setSliderFromAlpha(alpha)
+    end
+end)
+
+UIS.InputChanged:Connect(function(input)
+    if sliderDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local rel = input.Position.X - sliderLine.AbsolutePosition.X
+        local alpha = rel / sliderLine.AbsoluteSize.X
+        setSliderFromAlpha(alpha)
+    end
+end)
+
+-- ПАНЕЛЬ: НАСТРОЙКИ (копирование ссылки)
+local settingsPanel = create("Frame", {
+    Size = UDim2.new(1, -20, 1, -20),
+    Position = UDim2.new(0, 10, 0, 10),
+    BackgroundColor3 = Color3.fromRGB(14, 16, 32),
+    BorderSizePixel = 0,
+    Visible = false,
+}, contentFrame)
+create("UICorner", { CornerRadius = UDim.new(0, 12) }, settingsPanel)
+
+local settingsTitle = create("TextLabel", {
+    Size = UDim2.new(1, -20, 0, 24),
+    Position = UDim2.new(0, 10, 0, 6),
+    BackgroundTransparency = 1,
+    Font = Enum.Font.GothamBold,
+    Text = "Настройки",
+    TextSize = 16,
+    TextColor3 = Color3.fromRGB(220, 225, 255),
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, settingsPanel)
+
+local settingsSub = create("TextLabel", {
+    Size = UDim2.new(1, -20, 0, 36),
+    Position = UDim2.new(0, 10, 0, 26),
+    BackgroundTransparency = 1,
+    Font = Enum.Font.Gotham,
+    Text = "Кнопка ниже скопирует ссылку на твой Telegram-канал\nв буфер обмена и покажет уведомление.",
+    TextSize = 12,
+    TextColor3 = Color3.fromRGB(160, 165, 210),
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextYAlignment = Enum.TextYAlignment.Top,
+}, settingsPanel)
+
+local copyBtn = create("TextButton", {
+    Size = UDim2.new(0, 220, 0, 30),
+    Position = UDim2.new(0, 10, 0, 70),
+    BackgroundColor3 = Color3.fromRGB(70, 120, 255),
+    BorderSizePixel = 0,
+    Text = "Скопировать ссылку на канал",
+    Font = Enum.Font.GothamBold,
+    TextSize = 13,
+    TextColor3 = Color3.fromRGB(240, 245, 255),
+    AutoButtonColor = false,
+}, settingsPanel)
+create("UICorner", { CornerRadius = UDim.new(0, 8) }, copyBtn)
+
+copyBtn.MouseButton1Click:Connect(function()
+    copyToClipboard(TELEGRAM_LINK)
+end)
+
+---------------------- ЛОГИКА ПЕРЕКЛЮЧЕНИЯ ПАНЕЛЕЙ --------
+
+local function updatePanelsVisibility()
+    tokensPanel.Visible   = (currentMainTab == "autos"  and currentTopTab == "tokens")
+    playerPanel.Visible   = (currentMainTab == "player")
+    settingsPanel.Visible = (currentTopTab  == "settings")
+end
+
+updatePanelsVisibility()
+
+-- обновляем при смене вкладок
+for key, btn in pairs(sidebarButtons) do
+    btn.MouseButton1Click:Connect(function()
+        if MAIN_TABS[1] then end -- заглушка, уже обработано выше; просто чтобы не ругался :)
+        updatePanelsVisibility()
+    end)
+end
+
+for key, btn in pairs(topButtons) do
+    btn.MouseButton1Click:Connect(function()
+        updatePanelsVisibility()
+    end)
+end
+
 ---------------------- ПЕРЕТАСКИВАНИЕ ОКНА ----------------
 
 local draggingMain, dragStart, startPos
@@ -696,12 +912,15 @@ local bubble = create("TextButton", {
     Visible = false,
 })
 create("UICorner", { CornerRadius = UDim.new(1, 0) }, bubble)
-local bubbleStroke = create("UIStroke", {
+create("UIStroke", {
     Color = Color3.fromRGB(180, 200, 255),
     Thickness = 1.5,
 }, bubble)
 
 local collapsed = false
+local bubbleDragging = false
+local bubbleDragStart, bubbleStartPos
+local bubbleDragged = false -- чтобы не открывать окно после перетаскивания
 
 local function showBubble()
     bubble.Position = lastWindowPos + UDim2.new(0, MAIN_W - 40, 0, -20)
@@ -715,16 +934,11 @@ end
 collapseBtn.MouseButton1Click:Connect(function()
     if not collapsed then
         collapsed = true
-
         lastWindowPos = mainFrame.Position
 
         local ti = TweenInfo.new(0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-        TweenService:Create(mainFrame, ti, {
-            BackgroundTransparency = 1,
-        }):Play()
-        TweenService:Create(shadow, ti, {
-            ImageTransparency = 1,
-        }):Play()
+        TweenService:Create(mainFrame, ti, {BackgroundTransparency = 1}):Play()
+        TweenService:Create(shadow, ti, {ImageTransparency = 1}):Play()
 
         task.delay(0.2, function()
             mainFrame.Visible = false
@@ -738,9 +952,9 @@ collapseBtn.MouseButton1Click:Connect(function()
         shadow.Visible    = true
         mainFrame.Position = lastWindowPos
 
-        local ti = TweenInfo.new(0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
         mainFrame.BackgroundTransparency = 1
         shadow.ImageTransparency = 1
+        local ti = TweenInfo.new(0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
         TweenService:Create(mainFrame, ti, {BackgroundTransparency = 0}):Play()
         TweenService:Create(shadow, ti, {ImageTransparency = 0.55}):Play()
         updateShadow()
@@ -748,6 +962,11 @@ collapseBtn.MouseButton1Click:Connect(function()
 end)
 
 bubble.MouseButton1Click:Connect(function()
+    if bubbleDragged then
+        bubbleDragged = false -- это был именно drag, а не клик
+        return
+    end
+
     if collapsed then
         collapsed = false
         hideBubble()
@@ -755,35 +974,36 @@ bubble.MouseButton1Click:Connect(function()
         shadow.Visible    = true
         mainFrame.Position = lastWindowPos
 
-        local ti = TweenInfo.new(0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
         mainFrame.BackgroundTransparency = 1
         shadow.ImageTransparency = 1
+        local ti = TweenInfo.new(0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
         TweenService:Create(mainFrame, ti, {BackgroundTransparency = 0}):Play()
         TweenService:Create(shadow, ti, {ImageTransparency = 0.55}):Play()
         updateShadow()
     end
 end)
 
--- перетаскивание кружка
-local draggingBubble, bubbleStartPos, bubbleDragStart
-
 bubble.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        draggingBubble   = true
+        bubbleDragging   = true
         bubbleDragStart  = input.Position
         bubbleStartPos   = bubble.Position
+        bubbleDragged    = false
     end
 end)
 
 bubble.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        draggingBubble = false
+        bubbleDragging = false
     end
 end)
 
 UIS.InputChanged:Connect(function(input)
-    if draggingBubble and input.UserInputType == Enum.UserInputType.MouseMovement then
+    if bubbleDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
         local delta = input.Position - bubbleDragStart
+        if delta.Magnitude > 5 then
+            bubbleDragged = true
+        end
         bubble.Position = UDim2.new(
             bubbleStartPos.X.Scale, bubbleStartPos.X.Offset + delta.X,
             bubbleStartPos.Y.Scale, bubbleStartPos.Y.Offset + delta.Y
@@ -791,4 +1011,4 @@ UIS.InputChanged:Connect(function(input)
     end
 end)
 
-print("[TokenTP] Меню с вкладками и сворачиванием в кружок загружено.")
+print("[BeeSSshota] Меню обновлено: вкладка Игрок (спидхак), вкладка Настройки (копия ТГ-ссылки), фикс кружка.")
