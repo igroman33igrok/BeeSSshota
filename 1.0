@@ -1,6 +1,6 @@
 --=========================================================
 --  BSS Token Teleport UI
---  Левое меню + сабтабы + iOS-тумблеры + закрыть/свернуть
+--  Левое меню + сабтабы + iOS-тумблеры + сворачивание в кружок
 --=========================================================
 
 ---------------------- НАСТРОЙКИ ТОКЕНОВ ------------------
@@ -46,6 +46,7 @@ local collectiblesName = "Collectibles"
 
 local Players      = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local UIS          = game:GetService("UserInputService")
 local lp           = Players.LocalPlayer
 
 local function getHRP()
@@ -221,7 +222,6 @@ local gui = create("ScreenGui", {
 }, parentGui)
 
 local MAIN_W, MAIN_H = 620, 340
-local COLLAPSED_H = 120 -- высота в свернутом состоянии (только заголовок+вкладки)
 
 local shadow = create("ImageLabel", {
     Name = "Shadow",
@@ -361,7 +361,6 @@ for _, info in ipairs(MAIN_TABS) do
         btn.MouseButton1Click:Connect(function()
             currentMainTab = info.key
             setMainTabVisual()
-            -- пока контент реализован только для "autos"
         end)
     end
 end
@@ -428,7 +427,6 @@ for _, info in ipairs(TOP_TABS) do
         btn.MouseButton1Click:Connect(function()
             currentTopTab = info.key
             setTopTabVisual()
-            -- контент пока только для "tokens"
         end)
     end
 end
@@ -443,7 +441,6 @@ local underline = create("Frame", {
 }, topBar)
 create("UICorner", { CornerRadius = UDim.new(0, 4) }, underline)
 
--- кнопка свернуть
 local collapseBtn = create("TextButton", {
     Size = UDim2.new(0, 26, 0, 22),
     Position = UDim2.new(1, -60, 0.5, -11),
@@ -457,7 +454,6 @@ local collapseBtn = create("TextButton", {
 }, topBar)
 create("UICorner", { CornerRadius = UDim.new(0, 8) }, collapseBtn)
 
--- кнопка закрыть
 local closeBtn = create("TextButton", {
     Size = UDim2.new(0, 26, 0, 22),
     Position = UDim2.new(1, -30, 0.5, -11),
@@ -650,131 +646,149 @@ end
 
 updateStatusLabel()
 
----------------------- ПЕРЕТАСКИВАНИЕ + СВЕРНУТЬ ----------
+---------------------- ПЕРЕТАСКИВАНИЕ ОКНА ----------------
 
-local UIS = game:GetService("UserInputService")
-local dragging, dragStart, startPos
+local draggingMain, dragStart, startPos
+local lastWindowPos = mainFrame.Position
 
 mainFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
         and input.Position.Y < mainFrame.AbsolutePosition.Y + 40 then
-        dragging  = true
-        dragStart = input.Position
-        startPos  = mainFrame.Position
+        draggingMain  = true
+        dragStart     = input.Position
+        startPos      = mainFrame.Position
     end
 end)
 
 mainFrame.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = false
+        draggingMain = false
+        lastWindowPos = mainFrame.Position
     end
 end)
 
 UIS.InputChanged:Connect(function(input)
-    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+    if draggingMain and input.UserInputType == Enum.UserInputType.MouseMovement then
         local delta = input.Position - dragStart
         mainFrame.Position = UDim2.new(
             startPos.X.Scale, startPos.X.Offset + delta.X,
             startPos.Y.Scale, startPos.Y.Offset + delta.Y
         )
+        lastWindowPos = mainFrame.Position
         updateShadow()
     end
 end)
 
+---------------------- СВОРАЧИВАНИЕ В КРУЖОК ---------------
+
+local bubble = create("TextButton", {
+    Name = "TokenTP_Bubble",
+    Parent = gui,
+    Size = UDim2.new(0, 48, 0, 48),
+    Position = UDim2.new(0.5, 0, 0.5, 0),
+    BackgroundColor3 = Color3.fromRGB(80, 100, 255),
+    BorderSizePixel = 0,
+    Text = "≡",
+    Font = Enum.Font.GothamBold,
+    TextSize = 24,
+    TextColor3 = Color3.fromRGB(255, 255, 255),
+    AutoButtonColor = true,
+    Visible = false,
+})
+create("UICorner", { CornerRadius = UDim.new(1, 0) }, bubble)
+local bubbleStroke = create("UIStroke", {
+    Color = Color3.fromRGB(180, 200, 255),
+    Thickness = 1.5,
+}, bubble)
+
 local collapsed = false
-local function updateCollapsed()
-    if collapsed then
-        mainFrame.Size = UDim2.new(0, MAIN_W, 0, COLLAPSED_H)
-        contentFrame.Visible = false
-        tokensPanel.Visible  = false
-        collapseBtn.Text = "▴"
-    else
-        mainFrame.Size = UDim2.new(0, MAIN_W, 0, MAIN_H)
-        contentFrame.Visible = true
-        tokensPanel.Visible  = true
-        collapseBtn.Text = "▾"
-    end
-    updateShadow()
+
+local function showBubble()
+    bubble.Position = lastWindowPos + UDim2.new(0, MAIN_W - 40, 0, -20)
+    bubble.Visible  = true
 end
 
---=========================================
---  НОВОЕ СВОРАЧИВАНИЕ В КРУЖОК
---=========================================
-
-local bubble -- круглая кнопка после сворачивания
-
-local function createBubble()
-    bubble = Instance.new("TextButton")
-    bubble.Name = "BubbleButton"
-    bubble.Parent = gui
-    bubble.Size = UDim2.new(0, 50, 0, 50)
-    bubble.Position = mainFrame.Position + UDim2.new(0, MAIN_W - 30, 0, -20)
-    bubble.BackgroundColor3 = Color3.fromRGB(80, 100, 255)
-    bubble.Text = "≡"
-    bubble.TextColor3 = Color3.fromRGB(255, 255, 255)
-    bubble.Font = Enum.Font.GothamBold
-    bubble.TextSize = 24
-    bubble.AutoButtonColor = true
+local function hideBubble()
     bubble.Visible = false
-
-    -- круглая форма
-    local cr = Instance.new("UICorner", bubble)
-    cr.CornerRadius = UDim.new(1, 0)
-
-    -- подсветка вокруг круга
-    local stroke = Instance.new("UIStroke", bubble)
-    stroke.Color = Color3.fromRGB(180, 200, 255)
-    stroke.Thickness = 1.5
 end
-
-createBubble()
 
 collapseBtn.MouseButton1Click:Connect(function()
     if not collapsed then
-        -- сворачиваем
         collapsed = true
 
-        -- анимация исчезновения окна
-        TweenService:Create(mainFrame, TweenInfo.new(0.25), {
-            Size = UDim2.new(0, 0, 0, 0),
-            Position = UDim2.new(0.5, 0, 0.5, 0),
-            BackgroundTransparency = 1
+        lastWindowPos = mainFrame.Position
+
+        local ti = TweenInfo.new(0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+        TweenService:Create(mainFrame, ti, {
+            BackgroundTransparency = 1,
+        }):Play()
+        TweenService:Create(shadow, ti, {
+            ImageTransparency = 1,
         }):Play()
 
-        task.delay(0.25, function()
+        task.delay(0.2, function()
             mainFrame.Visible = false
-            bubble.Visible = true
+            shadow.Visible    = false
+            showBubble()
         end)
-
     else
-        -- разворачиваем
         collapsed = false
-        bubble.Visible = false
+        hideBubble()
         mainFrame.Visible = true
+        shadow.Visible    = true
+        mainFrame.Position = lastWindowPos
 
-        -- анимация появления окна
-        TweenService:Create(mainFrame, TweenInfo.new(0.25), {
-            Size = UDim2.new(0, MAIN_W, 0, MAIN_H),
-            Position = UDim2.new(0.5, -MAIN_W/2, 0.5, -MAIN_H/2),
-            BackgroundTransparency = 0
-        }):Play()
+        local ti = TweenInfo.new(0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+        mainFrame.BackgroundTransparency = 1
+        shadow.ImageTransparency = 1
+        TweenService:Create(mainFrame, ti, {BackgroundTransparency = 0}):Play()
+        TweenService:Create(shadow, ti, {ImageTransparency = 0.55}):Play()
+        updateShadow()
     end
 end)
 
--- нажимаем на круг → показываем меню
 bubble.MouseButton1Click:Connect(function()
-    collapsed = false
-    bubble.Visible = false
-    mainFrame.Visible = true
+    if collapsed then
+        collapsed = false
+        hideBubble()
+        mainFrame.Visible = true
+        shadow.Visible    = true
+        mainFrame.Position = lastWindowPos
 
-    TweenService:Create(mainFrame, TweenInfo.new(0.25), {
-        Size = UDim2.new(0, MAIN_W, 0, MAIN_H),
-        Position = UDim2.new(0.5, -MAIN_W/2, 0.5, -MAIN_H/2),
-        BackgroundTransparency = 0
-    }):Play()
+        local ti = TweenInfo.new(0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+        mainFrame.BackgroundTransparency = 1
+        shadow.ImageTransparency = 1
+        TweenService:Create(mainFrame, ti, {BackgroundTransparency = 0}):Play()
+        TweenService:Create(shadow, ti, {ImageTransparency = 0.55}):Play()
+        updateShadow()
+    end
 end)
 
+-- перетаскивание кружка
+local draggingBubble, bubbleStartPos, bubbleDragStart
 
-updateCollapsed()
+bubble.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        draggingBubble   = true
+        bubbleDragStart  = input.Position
+        bubbleStartPos   = bubble.Position
+    end
+end)
 
-print("[TokenTP] Меню с вкладками, закрытием и сворачиванием загружено.")
+bubble.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        draggingBubble = false
+    end
+end)
+
+UIS.InputChanged:Connect(function(input)
+    if draggingBubble and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - bubbleDragStart
+        bubble.Position = UDim2.new(
+            bubbleStartPos.X.Scale, bubbleStartPos.X.Offset + delta.X,
+            bubbleStartPos.Y.Scale, bubbleStartPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+print("[TokenTP] Меню с вкладками и сворачиванием в кружок загружено.")
