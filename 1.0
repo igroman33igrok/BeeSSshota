@@ -1,0 +1,707 @@
+--=========================================================
+--  BSS Token Teleport UI
+--  Левое меню + сабтабы + iOS-тумблеры + закрыть/свернуть
+--=========================================================
+
+---------------------- НАСТРОЙКИ ТОКЕНОВ ------------------
+
+local TOKEN_TYPES = {
+    Glitter = {
+        id    = "2542899798",
+        label = "Глиттер",
+    },
+    BlueBoost = {
+        id    = "1442863423",
+        label = "Синий буст",
+    },
+    PollenMark = {
+        id    = "2499540966",
+        label = "Метка пыльцы",
+    },
+    Focus = {
+        id    = "1629649299",
+        label = "Фокус",
+    },
+    Glue = {
+        id    = "2504978518",
+        label = "Клей",
+    },
+    Honey = {
+        id    = "1472135114",
+        label = "Мёд",
+    },
+    Bombs = {
+        id    = "1442725244",
+        label = "R/B/W бомбы",
+    },
+    HoneyMark = {
+        id    = "2499514197",
+        label = "Метка переработки мёда",
+    },
+}
+
+local collectiblesName = "Collectibles"
+
+---------------------- ЛОГИКА ТЕЛЕПОРТА -------------------
+
+local Players      = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local lp           = Players.LocalPlayer
+
+local function getHRP()
+    local char = lp.Character or lp.CharacterAdded:Wait()
+    local hrp  = char:FindFirstChild("HumanoidRootPart") or char:WaitForChild("HumanoidRootPart")
+    return hrp
+end
+
+local collectibles = workspace:FindFirstChild(collectiblesName)
+if not collectibles then
+    warn("[TokenTP] Не нашёл workspace." .. collectiblesName)
+end
+
+local function textureMatches(tex, idDigits)
+    if not tex then return false end
+    if tex == ("rbxassetid://" .. idDigits) then return true end
+    if tex == idDigits then return true end
+    if tex:match(idDigits) then return true end
+    return false
+end
+
+local function getTokenType(token)
+    if not token then return nil end
+
+    local frontDecal
+    if token:IsA("BasePart") then
+        frontDecal = token:FindFirstChild("FrontDecal")
+    elseif token:IsA("Model") then
+        frontDecal = token:FindFirstChild("FrontDecal", true)
+    end
+
+    if not (frontDecal and frontDecal:IsA("Decal")) then
+        return nil
+    end
+
+    local tex = frontDecal.Texture or ""
+    for key, info in pairs(TOKEN_TYPES) do
+        if textureMatches(tex, info.id) then
+            return key
+        end
+    end
+
+    return nil
+end
+
+local function teleportToToken(token, tokenType)
+    local hrp = getHRP()
+    if not hrp then return end
+
+    local targetPart
+    if token:IsA("BasePart") then
+        targetPart = token
+    elseif token:IsA("Model") then
+        targetPart = token.PrimaryPart or token:FindFirstChildWhichIsA("BasePart", true)
+    end
+
+    if targetPart then
+        hrp.CFrame = targetPart.CFrame + Vector3.new(0, 4, 0)
+        print(string.format("[TokenTP] TP к токену (%s): %s",
+            tokenType or "?", targetPart:GetFullName()))
+    else
+        warn("[TokenTP] Не нашёл Part внутри токена")
+    end
+end
+
+---------------------- СОСТОЯНИЕ --------------------------
+
+local enabledTypes = {}
+for key in pairs(TOKEN_TYPES) do
+    enabledTypes[key] = false
+end
+
+local connChildAdded = nil
+
+local function anyTypeEnabled()
+    for _, v in pairs(enabledTypes) do
+        if v then return true end
+    end
+    return false
+end
+
+local function ensureCollectibles()
+    if collectibles and collectibles.Parent then return true end
+    collectibles = workspace:FindFirstChild(collectiblesName)
+    if not collectibles then
+        warn("[TokenTP] Нет папки " .. collectiblesName)
+        return false
+    end
+    return true
+end
+
+local function disconnectListener()
+    if connChildAdded then
+        connChildAdded:Disconnect()
+        connChildAdded = nil
+    end
+end
+
+local function connectListener()
+    if connChildAdded or not ensureCollectibles() then return end
+
+    connChildAdded = collectibles.ChildAdded:Connect(function(child)
+        task.wait(0.1)
+        if not anyTypeEnabled() then return end
+
+        local tType = getTokenType(child)
+        if tType and enabledTypes[tType] then
+            teleportToToken(child, tType)
+        end
+    end)
+end
+
+local function setTypeEnabled(tokenKey, on)
+    enabledTypes[tokenKey] = on and true or false
+
+    if anyTypeEnabled() then
+        connectListener()
+        if ensureCollectibles() then
+            task.spawn(function()
+                for _, token in ipairs(collectibles:GetChildren()) do
+                    if not enabledTypes[tokenKey] then break end
+                    local tType = getTokenType(token)
+                    if tType == tokenKey then
+                        teleportToToken(token, tType)
+                        break
+                    end
+                end
+            end)
+        end
+    else
+        disconnectListener()
+    end
+end
+
+-------------------------- UI -----------------------------
+
+pcall(function()
+    local cg = game:GetService("CoreGui")
+    local old = cg:FindFirstChild("TokenTP_UI")
+    if old then old:Destroy() end
+    if gethui then
+        local h = gethui()
+        local old2 = h:FindFirstChild("TokenTP_UI")
+        if old2 then old2:Destroy() end
+    end
+end)
+
+local parentGui
+do
+    local ok, res = pcall(function()
+        if gethui then
+            return gethui()
+        else
+            return game:GetService("CoreGui")
+        end
+    end)
+    parentGui = ok and res or game:GetService("CoreGui")
+end
+
+local function create(className, props, parent)
+    local o = Instance.new(className)
+    for k, v in pairs(props or {}) do
+        o[k] = v
+    end
+    if parent then o.Parent = parent end
+    return o
+end
+
+local gui = create("ScreenGui", {
+    Name = "TokenTP_UI",
+    ResetOnSpawn = false,
+    IgnoreGuiInset = true,
+}, parentGui)
+
+local MAIN_W, MAIN_H = 620, 340
+local COLLAPSED_H = 120 -- высота в свернутом состоянии (только заголовок+вкладки)
+
+local shadow = create("ImageLabel", {
+    Name = "Shadow",
+    Size = UDim2.new(0, MAIN_W + 40, 0, MAIN_H + 40),
+    Position = UDim2.new(0.5, -(MAIN_W + 40)/2, 0.5, -(MAIN_H + 40)/2),
+    BackgroundTransparency = 1,
+    Image = "rbxassetid://1316045217",
+    ImageColor3 = Color3.fromRGB(0, 0, 0),
+    ImageTransparency = 0.55,
+    ScaleType = Enum.ScaleType.Slice,
+    SliceCenter = Rect.new(10, 10, 118, 118),
+}, gui)
+
+local mainFrame = create("Frame", {
+    Name = "MainFrame",
+    Size = UDim2.new(0, MAIN_W, 0, MAIN_H),
+    Position = UDim2.new(0.5, -MAIN_W/2, 0.5, -MAIN_H/2),
+    BackgroundColor3 = Color3.fromRGB(10, 12, 24),
+    BorderSizePixel = 0,
+}, gui)
+
+create("UICorner", { CornerRadius = UDim.new(0, 16) }, mainFrame)
+create("UIStroke", {
+    Thickness = 2,
+    Color = Color3.fromRGB(90, 120, 220),
+    Transparency = 0.2,
+}, mainFrame)
+
+create("UIGradient", {
+    Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(22, 26, 60)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(6, 8, 20)),
+    }),
+    Rotation = 45,
+}, mainFrame)
+
+local function updateShadow()
+    shadow.Position = mainFrame.Position + UDim2.new(0, -20, 0, -20)
+    shadow.Size     = UDim2.new(0, mainFrame.Size.X.Offset + 40, 0, mainFrame.Size.Y.Offset + 40)
+end
+updateShadow()
+
+---------------------- ЛЕВОЕ МЕНЮ -------------------------
+
+local sidebar = create("Frame", {
+    Name = "Sidebar",
+    Size = UDim2.new(0, 150, 1, 0),
+    Position = UDim2.new(0, 0, 0, 0),
+    BackgroundColor3 = Color3.fromRGB(8, 10, 20),
+    BorderSizePixel = 0,
+}, mainFrame)
+create("UICorner", { CornerRadius = UDim.new(0, 16) }, sidebar)
+
+local logoLabel = create("TextLabel", {
+    Size = UDim2.new(1, 0, 0, 40),
+    Position = UDim2.new(0, 0, 0, 4),
+    BackgroundTransparency = 1,
+    Font = Enum.Font.GothamBold,
+    Text = "Shotacon\nTools",
+    TextSize = 18,
+    TextColor3 = Color3.fromRGB(200, 210, 255),
+    TextYAlignment = Enum.TextYAlignment.Top,
+}, sidebar)
+
+local sidebarButtonsFrame = create("Frame", {
+    Size = UDim2.new(1, 0, 1, -50),
+    Position = UDim2.new(0, 0, 0, 50),
+    BackgroundTransparency = 1,
+}, sidebar)
+
+local sideList = create("UIListLayout", {
+    Padding = UDim.new(0, 6),
+    FillDirection = Enum.FillDirection.Vertical,
+    HorizontalAlignment = Enum.HorizontalAlignment.Center,
+    VerticalAlignment = Enum.VerticalAlignment.Top,
+}, sidebarButtonsFrame)
+
+local MAIN_TABS = {
+    { key = "autos", label = "Автосбор" },
+    { key = "future1", label = "Будущее 1", disabled = true },
+    { key = "future2", label = "Будущее 2", disabled = true },
+}
+
+local currentMainTab = "autos"
+local sidebarButtons = {}
+
+local function setMainTabVisual()
+    for key, btn in pairs(sidebarButtons) do
+        local selected = (key == currentMainTab)
+        local goalColor = selected and Color3.fromRGB(70, 120, 255) or Color3.fromRGB(26, 30, 60)
+        local goalText  = selected and Color3.fromRGB(235, 240, 255) or Color3.fromRGB(185, 190, 220)
+
+        btn.BackgroundColor3 = goalColor
+        btn.Label.TextColor3 = goalText
+    end
+end
+
+for _, info in ipairs(MAIN_TABS) do
+    local btn = create("TextButton", {
+        Size = UDim2.new(1, -30, 0, 30),
+        BackgroundColor3 = Color3.fromRGB(26, 30, 60),
+        BorderSizePixel = 0,
+        Text = "",
+        AutoButtonColor = false,
+    }, sidebarButtonsFrame)
+    create("UICorner", { CornerRadius = UDim.new(0, 10) }, btn)
+
+    local lbl = create("TextLabel", {
+        Name = "Label",
+        Size = UDim2.new(1, -10, 1, 0),
+        Position = UDim2.new(0, 10, 0, 0),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.Gotham,
+        Text = info.label,
+        TextSize = 14,
+        TextColor3 = Color3.fromRGB(185, 190, 220),
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, btn)
+
+    sidebarButtons[info.key] = btn
+
+    if info.disabled then
+        lbl.TextColor3 = Color3.fromRGB(110, 110, 140)
+        btn.Active = false
+    else
+        btn.MouseEnter:Connect(function()
+            if currentMainTab == info.key then return end
+            TweenService:Create(btn, TweenInfo.new(0.12, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+                BackgroundColor3 = Color3.fromRGB(40, 50, 90)
+            }):Play()
+        end)
+
+        btn.MouseLeave:Connect(function()
+            setMainTabVisual()
+        end)
+
+        btn.MouseButton1Click:Connect(function()
+            currentMainTab = info.key
+            setMainTabVisual()
+            -- пока контент реализован только для "autos"
+        end)
+    end
+end
+
+setMainTabVisual()
+
+---------------------- ВЕРХНИЕ САБТАБЫ + КНОПКИ -----------
+
+local topBar = create("Frame", {
+    Name = "TopBar",
+    Size = UDim2.new(1, -150, 0, 40),
+    Position = UDim2.new(0, 150, 0, 0),
+    BackgroundColor3 = Color3.fromRGB(14, 16, 30),
+    BorderSizePixel = 0,
+}, mainFrame)
+
+local topTabsFrame = create("Frame", {
+    Size = UDim2.new(0, 400, 1, 0),
+    Position = UDim2.new(0, 10, 0, 0),
+    BackgroundTransparency = 1,
+}, topBar)
+
+local topList = create("UIListLayout", {
+    Padding = UDim.new(0, 12),
+    FillDirection = Enum.FillDirection.Horizontal,
+    HorizontalAlignment = Enum.HorizontalAlignment.Left,
+    VerticalAlignment = Enum.VerticalAlignment.Center,
+}, topTabsFrame)
+
+local TOP_TABS = {
+    { key = "tokens", label = "Токены" },
+    { key = "misc", label = "Разное (soon)", disabled = true },
+    { key = "settings", label = "Настройки (soon)", disabled = true },
+}
+
+local currentTopTab = "tokens"
+local topButtons = {}
+
+local function setTopTabVisual()
+    for key, btn in pairs(topButtons) do
+        local selected = (key == currentTopTab)
+        btn.TextColor3 = selected and Color3.fromRGB(180, 210, 255) or Color3.fromRGB(130, 140, 180)
+        btn.Font = selected and Enum.Font.GothamBold or Enum.Font.Gotham
+    end
+end
+
+for _, info in ipairs(TOP_TABS) do
+    local btn = create("TextButton", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(0, math.max(80, #info.label * 6), 0, 24),
+        Text = info.label,
+        Font = Enum.Font.Gotham,
+        TextSize = 14,
+        TextColor3 = Color3.fromRGB(130, 140, 180),
+        AutoButtonColor = false,
+    }, topTabsFrame)
+
+    topButtons[info.key] = btn
+
+    if info.disabled then
+        btn.TextColor3 = Color3.fromRGB(90, 95, 130)
+        btn.Active = false
+    else
+        btn.MouseButton1Click:Connect(function()
+            currentTopTab = info.key
+            setTopTabVisual()
+            -- контент пока только для "tokens"
+        end)
+    end
+end
+
+setTopTabVisual()
+
+local underline = create("Frame", {
+    Size = UDim2.new(0, 80, 0, 2),
+    Position = UDim2.new(0, 10, 1, -2),
+    BackgroundColor3 = Color3.fromRGB(90, 140, 255),
+    BorderSizePixel = 0,
+}, topBar)
+create("UICorner", { CornerRadius = UDim.new(0, 4) }, underline)
+
+-- кнопка свернуть
+local collapseBtn = create("TextButton", {
+    Size = UDim2.new(0, 26, 0, 22),
+    Position = UDim2.new(1, -60, 0.5, -11),
+    BackgroundColor3 = Color3.fromRGB(40, 45, 70),
+    BorderSizePixel = 0,
+    Text = "▾",
+    Font = Enum.Font.GothamBold,
+    TextSize = 14,
+    TextColor3 = Color3.fromRGB(220, 225, 245),
+    AutoButtonColor = false,
+}, topBar)
+create("UICorner", { CornerRadius = UDim.new(0, 8) }, collapseBtn)
+
+-- кнопка закрыть
+local closeBtn = create("TextButton", {
+    Size = UDim2.new(0, 26, 0, 22),
+    Position = UDim2.new(1, -30, 0.5, -11),
+    BackgroundColor3 = Color3.fromRGB(70, 40, 48),
+    BorderSizePixel = 0,
+    Text = "X",
+    Font = Enum.Font.GothamBold,
+    TextSize = 14,
+    TextColor3 = Color3.fromRGB(255, 215, 225),
+    AutoButtonColor = false,
+}, topBar)
+create("UICorner", { CornerRadius = UDim.new(0, 8) }, closeBtn)
+
+closeBtn.MouseButton1Click:Connect(function()
+    disconnectListener()
+    gui:Destroy()
+end)
+
+---------------------- ПРАВАЯ ЧАСТЬ (КОНТЕНТ) --------------
+
+local contentFrame = create("Frame", {
+    Name = "Content",
+    Size = UDim2.new(1, -150, 1, -40),
+    Position = UDim2.new(0, 150, 0, 40),
+    BackgroundTransparency = 1,
+}, mainFrame)
+
+local tokensPanel = create("Frame", {
+    Size = UDim2.new(1, -20, 1, -20),
+    Position = UDim2.new(0, 10, 0, 10),
+    BackgroundColor3 = Color3.fromRGB(14, 16, 32),
+    BorderSizePixel = 0,
+}, contentFrame)
+create("UICorner", { CornerRadius = UDim.new(0, 12) }, tokensPanel)
+
+local innerTitle = create("TextLabel", {
+    Size = UDim2.new(1, -20, 0, 24),
+    Position = UDim2.new(0, 10, 0, 6),
+    BackgroundTransparency = 1,
+    Font = Enum.Font.GothamBold,
+    Text = "Автосбор токенов",
+    TextSize = 16,
+    TextColor3 = Color3.fromRGB(220, 225, 255),
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, tokensPanel)
+
+local innerSub = create("TextLabel", {
+    Size = UDim2.new(1, -20, 0, 18),
+    Position = UDim2.new(0, 10, 0, 26),
+    BackgroundTransparency = 1,
+    Font = Enum.Font.Gotham,
+    Text = "Выбери, к каким токенам телепортироваться автоматически",
+    TextSize = 12,
+    TextColor3 = Color3.fromRGB(160, 165, 210),
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, tokensPanel)
+
+local listHolder = create("Frame", {
+    Size = UDim2.new(1, -20, 1, -70),
+    Position = UDim2.new(0, 10, 0, 50),
+    BackgroundTransparency = 1,
+}, tokensPanel)
+
+local scroll = create("ScrollingFrame", {
+    Size = UDim2.new(1, 0, 1, 0),
+    CanvasSize = UDim2.new(0, 0, 0, 0),
+    ScrollBarThickness = 4,
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+}, listHolder)
+
+local listLayout2 = create("UIListLayout", {
+    Padding = UDim.new(0, 6),
+    FillDirection = Enum.FillDirection.Vertical,
+    HorizontalAlignment = Enum.HorizontalAlignment.Left,
+    VerticalAlignment = Enum.VerticalAlignment.Top,
+}, scroll)
+
+listLayout2:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    scroll.CanvasSize = UDim2.new(0, 0, 0, listLayout2.AbsoluteContentSize.Y)
+end)
+
+local statusLabel = create("TextLabel", {
+    Size = UDim2.new(1, -20, 0, 18),
+    Position = UDim2.new(0, 10, 1, -22),
+    BackgroundTransparency = 1,
+    Font = Enum.Font.Gotham,
+    Text = "Активно типов: 0",
+    TextSize = 12,
+    TextColor3 = Color3.fromRGB(200, 205, 235),
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, tokensPanel)
+
+local function updateStatusLabel()
+    local n = 0
+    for _, v in pairs(enabledTypes) do
+        if v then n = n + 1 end
+    end
+    statusLabel.Text = "Активно типов: " .. tostring(n)
+end
+
+---------------------- СПИСОК ТОКЕНОВ ---------------------
+
+for key, info in pairs(TOKEN_TYPES) do
+    local row = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 26),
+        BackgroundTransparency = 1,
+    }, scroll)
+
+    local nameLabel = create("TextLabel", {
+        Size = UDim2.new(1, -130, 1, 0),
+        Position = UDim2.new(0, 0, 0, 0),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.Gotham,
+        Text = info.label,
+        TextSize = 13,
+        TextColor3 = Color3.fromRGB(225, 228, 250),
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, row)
+
+    local toggleBtn = create("TextButton", {
+        Size = UDim2.new(0, 80, 0, 22),
+        Position = UDim2.new(1, -84, 0.5, -11),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        AutoButtonColor = false,
+        Text = "",
+    }, row)
+
+    local track = create("Frame", {
+        Size = UDim2.new(1, 0, 1, 0),
+        BackgroundColor3 = Color3.fromRGB(60, 70, 100),
+        BorderSizePixel = 0,
+    }, toggleBtn)
+    create("UICorner", { CornerRadius = UDim.new(1, 0) }, track)
+
+    local knob = create("Frame", {
+        Size = UDim2.new(0, 18, 1, -4),
+        Position = UDim2.new(0, 3, 0, 2),
+        BackgroundColor3 = Color3.fromRGB(235, 238, 255),
+        BorderSizePixel = 0,
+    }, track)
+    create("UICorner", { CornerRadius = UDim.new(1, 0) }, knob)
+
+    local on = false
+
+    local function setVisual(immediate)
+        local goalTrackColor = on and Color3.fromRGB(90, 180, 120) or Color3.fromRGB(60, 70, 100)
+        local goalKnobPos    = on and UDim2.new(1, -21, 0, 2)      or UDim2.new(0, 3, 0, 2)
+
+        if immediate then
+            track.BackgroundColor3 = goalTrackColor
+            knob.Position          = goalKnobPos
+        else
+            local ti = TweenInfo.new(0.18, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+            TweenService:Create(track, ti, {BackgroundColor3 = goalTrackColor}):Play()
+            TweenService:Create(knob,  ti, {Position = goalKnobPos}):Play()
+        end
+    end
+
+    setVisual(true)
+
+    toggleBtn.MouseEnter:Connect(function()
+        local ti = TweenInfo.new(0.12, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+        local col = on and Color3.fromRGB(105, 195, 140) or Color3.fromRGB(80, 90, 120)
+        TweenService:Create(track, ti, {BackgroundColor3 = col}):Play()
+    end)
+
+    toggleBtn.MouseLeave:Connect(function()
+        setVisual(false)
+    end)
+
+    toggleBtn.MouseButton1Down:Connect(function()
+        local ti = TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+        TweenService:Create(knob, ti, {Size = UDim2.new(0, 16, 1, -6)}):Play()
+    end)
+
+    toggleBtn.MouseButton1Up:Connect(function()
+        local ti = TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+        TweenService:Create(knob, ti, {Size = UDim2.new(0, 18, 1, -4)}):Play()
+    end)
+
+    toggleBtn.MouseButton1Click:Connect(function()
+        on = not on
+        setTypeEnabled(key, on)
+        setVisual(false)
+        updateStatusLabel()
+    end)
+end
+
+updateStatusLabel()
+
+---------------------- ПЕРЕТАСКИВАНИЕ + СВЕРНУТЬ ----------
+
+local UIS = game:GetService("UserInputService")
+local dragging, dragStart, startPos
+
+mainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        and input.Position.Y < mainFrame.AbsolutePosition.Y + 40 then
+        dragging  = true
+        dragStart = input.Position
+        startPos  = mainFrame.Position
+    end
+end)
+
+mainFrame.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+UIS.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+        updateShadow()
+    end
+end)
+
+local collapsed = false
+local function updateCollapsed()
+    if collapsed then
+        mainFrame.Size = UDim2.new(0, MAIN_W, 0, COLLAPSED_H)
+        contentFrame.Visible = false
+        tokensPanel.Visible  = false
+        collapseBtn.Text = "▴"
+    else
+        mainFrame.Size = UDim2.new(0, MAIN_W, 0, MAIN_H)
+        contentFrame.Visible = true
+        tokensPanel.Visible  = true
+        collapseBtn.Text = "▾"
+    end
+    updateShadow()
+end
+
+collapseBtn.MouseButton1Click:Connect(function()
+    collapsed = not collapsed
+    updateCollapsed()
+end)
+
+updateCollapsed()
+
+print("[TokenTP] Меню с вкладками, закрытием и сворачиванием загружено.")
