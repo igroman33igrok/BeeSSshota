@@ -1,10 +1,10 @@
--- BeeSSshota Key Loader
+-- BeeSSshota Key Loader (через Telegram-бот/Render)
 -- 1) Показывает окно ввода ключа
--- 2) Проверяет ключ по списку с GitHub
--- 3) Если ключ верный — загружает основной скрипт 1.0
+-- 2) Отправляет ключ на https://bee-key-bot.onrender.com/check?key=...
+-- 3) Если ответ "OK" — загружает основной скрипт 1.0
 
-local MAIN_SCRIPT_URL = "https://raw.githubusercontent.com/igroman33igrok/BeeSSshota/refs/heads/main/1.0"
-local KEYS_URL        = "https://raw.githubusercontent.com/igroman33igrok/BeeSSshota/refs/heads/main/keys.txt"
+local MAIN_SCRIPT_URL  = "https://raw.githubusercontent.com/igroman33igrok/BeeSSshota/refs/heads/main/1.0"
+local CHECK_BASE_URL   = "https://bee-key-bot.onrender.com/check?key="
 
 -- ================== ХЕЛПЕРЫ ==================
 
@@ -17,17 +17,6 @@ local function httpGet(url)
         return nil
     end
     return res
-end
-
-local function parseKeys(text)
-    local t = {}
-    for line in string.gmatch(text, "[^\r\n]+") do
-        line = line:gsub("^%s+", ""):gsub("%s+$", "")
-        if line ~= "" then
-            t[line] = true
-        end
-    end
-    return t
 end
 
 local Players    = game:GetService("Players")
@@ -44,20 +33,6 @@ local function notify(msg)
     end)
 end
 
--- ================== ЗАГРУЗКА КЛЮЧЕЙ ==================
-
-local keysText = httpGet(KEYS_URL)
-if not keysText then
-    notify("Не удалось загрузить список ключей :(")
-    return
-end
-
-local validKeys = parseKeys(keysText)
-if next(validKeys) == nil then
-    notify("Список ключей пуст. Напиши автору скрипта.")
-    return
-end
-
 -- ================== UI ДЛЯ ВВОДА КЛЮЧА ==================
 
 local parentGui
@@ -70,7 +45,6 @@ pcall(function()
 end)
 parentGui = parentGui or game:GetService("CoreGui")
 
--- Удаляем старый UI, если вдруг есть
 local old = parentGui:FindFirstChild("BeeSSshota_KeyUI")
 if old then old:Destroy() end
 
@@ -162,29 +136,44 @@ local activated = false
 
 local function tryActivate()
     if activated then return end
+
     local key = tostring(box.Text or ""):gsub("^%s+", ""):gsub("%s+$", "")
-    if validKeys[key] then
-        activated = true
-        notify("Ключ принят. Загрузка BeeSSshota...")
-        gui:Destroy()
-
-        local code = httpGet(MAIN_SCRIPT_URL)
-        if not code then
-            notify("Ошибка загрузки основного скрипта :(")
-            return
-        end
-
-        local fn, err = loadstring(code)
-        if not fn then
-            warn("[BeeSSshota] loadstring error: " .. tostring(err))
-            notify("Ошибка выполнения скрипта.")
-            return
-        end
-
-        fn()
-    else
-        notify("Неверный ключ")
+    if key == "" then
+        notify("Сначала введи ключ")
+        return
     end
+
+    notify("Проверяю ключ...")
+
+    local resp = httpGet(CHECK_BASE_URL .. key)
+    if not resp then
+        notify("Не удалось связаться с сервером. Попробуй ещё раз.")
+        return
+    end
+
+    if not resp:find("OK") then
+        notify("Неверный или устаревший ключ")
+        return
+    end
+
+    activated = true
+    notify("Ключ принят. Загрузка BeeSSshota...")
+    gui:Destroy()
+
+    local code = httpGet(MAIN_SCRIPT_URL)
+    if not code then
+        notify("Ошибка загрузки основного скрипта :(")
+        return
+    end
+
+    local fn, err = loadstring(code)
+    if not fn then
+        warn("[BeeSSshota] loadstring error: " .. tostring(err))
+        notify("Ошибка выполнения скрипта.")
+        return
+    end
+
+    fn()
 end
 
 btn.MouseButton1Click:Connect(tryActivate)
