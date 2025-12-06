@@ -229,67 +229,41 @@ end
 
 ---------------------- СПИДХАК ----------------------------
 
-local humanoid
-local baseWalkSpeed = 16
-local speedDelta = 0          -- 0..90, итог = baseWalkSpeed + speedDelta
-local lastAppliedSpeed = nil
-local walkConn = nil
+local currentHumanoid = nil
+local baseWalkSpeed = 16      -- скорость до спидхака
+local speedValue = 0          -- наш слайдер: 0..90
+local speedEnabled = false    -- включён ли спидхак
+
+local function updateHumanoidRef()
+    local char = lp.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    currentHumanoid = hum
+    if hum then
+        -- базовую скорость запоминаем для ЭТОГО персонажа
+        baseWalkSpeed = hum.WalkSpeed
+        -- и сразу применяем спидхак, если был включён раньше
+        if speedEnabled then
+            hum.WalkSpeed = baseWalkSpeed + speedValue
+        else
+            hum.WalkSpeed = baseWalkSpeed
+        end
+    end
+end
 
 local function applySpeed()
-    if humanoid then
-        local target = baseWalkSpeed + speedDelta
-        lastAppliedSpeed = target
-        humanoid.WalkSpeed = target
+    if currentHumanoid then
+        if speedEnabled then
+            currentHumanoid.WalkSpeed = baseWalkSpeed + speedValue
+        else
+            currentHumanoid.WalkSpeed = baseWalkSpeed
+        end
     end
 end
 
-local function bindHumanoid(h)
-    if walkConn then
-        walkConn:Disconnect()
-        walkConn = nil
-    end
-
-    humanoid = h
-    if humanoid then
-        baseWalkSpeed = humanoid.WalkSpeed
-        lastAppliedSpeed = nil
-
-        walkConn = humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
-            local current = humanoid.WalkSpeed
-
-            -- если это наш собственный set, игнорируем
-            if lastAppliedSpeed and math.abs(current - lastAppliedSpeed) < 0.001 then
-                return
-            end
-
-            -- игра изменила скорость:
-            if speedDelta ~= 0 then
-                -- считаем новый base как то, что выставила игра,
-                -- и снова накручиваем наш спидхак поверх
-                baseWalkSpeed = current
-                applySpeed()
-            else
-                -- спидхак выключен, просто обновляем базу
-                baseWalkSpeed = current
-            end
-        end)
-    end
-end
-
-local function updateHumanoid()
-    local char = lp.Character or lp.CharacterAdded:Wait()
-    local h = char:FindFirstChildOfClass("Humanoid")
-    if h then
-        bindHumanoid(h)
-        applySpeed()
-    end
-end
-
-updateHumanoid()
-
+updateHumanoidRef()
 lp.CharacterAdded:Connect(function()
     task.wait(1)
-    updateHumanoid()
+    updateHumanoidRef()
 end)
 
 ---------------------- АНТИ-АФК ---------------------------
@@ -779,6 +753,7 @@ updateStatusLabel()
 
 ----------------- ПАНЕЛЬ: ИГРОК (СПИДХАК) ---------------
 
+-- ПАНЕЛЬ: ИГРОК
 local playerPanel = create("Frame", {
     Size = UDim2.new(1, -20, 1, -20),
     Position = UDim2.new(0, 10, 0, 10),
@@ -793,93 +768,140 @@ local playerTitle = create("TextLabel", {
     Position = UDim2.new(0, 10, 0, 6),
     BackgroundTransparency = 1,
     Font = Enum.Font.GothamBold,
-    Text = "Игрок – Спидхак",
+    Text = "Игрок",
     TextSize = 16,
     TextColor3 = Color3.fromRGB(220, 225, 255),
     TextXAlignment = Enum.TextXAlignment.Left,
 }, playerPanel)
 
 local playerSub = create("TextLabel", {
-    Size = UDim2.new(1, -20, 0, 34),
+    Size = UDim2.new(1, -20, 0, 36),
     Position = UDim2.new(0, 10, 0, 26),
     BackgroundTransparency = 1,
     Font = Enum.Font.Gotham,
-    Text = "Ползунок от 0 до 90\n0 = базовая скорость персонажа",
+    Text = "Настройка скорости передвижения.\n0 = стандартная скорость персонажа.",
     TextSize = 12,
     TextColor3 = Color3.fromRGB(160, 165, 210),
     TextXAlignment = Enum.TextXAlignment.Left,
     TextYAlignment = Enum.TextYAlignment.Top,
 }, playerPanel)
 
-local speedValueLabel = create("TextLabel", {
-    Size = UDim2.new(1, -20, 0, 20),
+-- === СПИДХАК СЛАЙДЕР ===
+local maxSpeed = 90  -- максимум на слайдере
+
+local speedRow = create("Frame", {
+    Size = UDim2.new(1, -20, 0, 50),
     Position = UDim2.new(0, 10, 0, 70),
     BackgroundTransparency = 1,
+}, playerPanel)
+
+local speedLabel = create("TextLabel", {
+    Size = UDim2.new(1, 0, 0, 18),
+    Position = UDim2.new(0, 0, 0, 0),
+    BackgroundTransparency = 1,
     Font = Enum.Font.Gotham,
-    Text = "Прибавка скорости: 0 (итог: "..tostring(baseWalkSpeed)..")",
-    TextSize = 13,
+    Text = "Спидхак",
+    TextSize = 14,
     TextColor3 = Color3.fromRGB(220, 225, 255),
     TextXAlignment = Enum.TextXAlignment.Left,
-}, playerPanel)
+}, speedRow)
 
-local sliderFrame = create("Frame", {
-    Size = UDim2.new(1, -40, 0, 24),
-    Position = UDim2.new(0, 20, 0, 100),
+local speedValueLabel = create("TextLabel", {
+    Size = UDim2.new(0, 60, 0, 18),
+    Position = UDim2.new(1, -60, 0, 0),
     BackgroundTransparency = 1,
-}, playerPanel)
+    Font = Enum.Font.GothamBold,
+    Text = tostring(speedValue), -- ВАЖНО: используем ГЛОБАЛЬНОЕ значение
+    TextSize = 14,
+    TextColor3 = Color3.fromRGB(200, 210, 255),
+    TextXAlignment = Enum.TextXAlignment.Right,
+}, speedRow)
 
-local sliderLine = create("Frame", {
-    Size = UDim2.new(1, 0, 0, 4),
-    Position = UDim2.new(0, 0, 0.5, -2),
-    BackgroundColor3 = Color3.fromRGB(70, 80, 120),
+local speedTrack = create("Frame", {
+    Size = UDim2.new(1, -10, 0, 6),
+    Position = UDim2.new(0, 0, 0, 26),
+    BackgroundColor3 = Color3.fromRGB(45, 50, 80),
     BorderSizePixel = 0,
-}, sliderFrame)
-create("UICorner", { CornerRadius = UDim.new(1, 0) }, sliderLine)
+}, speedRow)
+create("UICorner", { CornerRadius = UDim.new(0, 3) }, speedTrack)
 
-local sliderKnob = create("Frame", {
-    Size = UDim2.new(0, 14, 0, 14),
-    Position = UDim2.new(0, -7, 0.5, -7),
-    BackgroundColor3 = Color3.fromRGB(180, 200, 255),
+local speedFill = create("Frame", {
+    Size = UDim2.new(0, 0, 1, 0),
+    BackgroundColor3 = Color3.fromRGB(120, 160, 255),
     BorderSizePixel = 0,
-}, sliderFrame)
-create("UICorner", { CornerRadius = UDim.new(1, 0) }, sliderKnob)
-create("UIStroke", {
-    Color = Color3.fromRGB(230, 235, 255),
-    Thickness = 1,
-}, sliderKnob)
+}, speedTrack)
+create("UICorner", { CornerRadius = UDim.new(0, 3) }, speedFill)
 
-local sliderDragging = false
+local speedKnob = create("Frame", {
+    Size = UDim2.new(0, 12, 0, 12),
+    Position = UDim2.new(0, -6, 0.5, -6),
+    BackgroundColor3 = Color3.fromRGB(230, 235, 255),
+    BorderSizePixel = 0,
+}, speedTrack)
+create("UICorner", { CornerRadius = UDim.new(1, 0) }, speedKnob)
 
-local function setSliderFromAlpha(alpha)
-    alpha = math.clamp(alpha, 0, 1)
-    sliderKnob.Position = UDim2.new(alpha, -7, 0.5, -7)
-    speedDelta = math.floor(alpha * 90 + 0.5)
-    applySpeed()
-    speedValueLabel.Text = string.format("Прибавка скорости: %d (итог: %d)", speedDelta, baseWalkSpeed + speedDelta)
+local draggingSpeed = false
+
+local function setSpeedVisual(immediate)
+    -- нормализуем значение 0..1
+    local alpha = math.clamp(speedValue / maxSpeed, 0, 1)
+    local trackSize = speedTrack.AbsoluteSize.X
+    local trackPos = speedTrack.AbsolutePosition.X
+
+    -- позиция ручки
+    local knobX = alpha
+    local goalKnobPos = UDim2.new(knobX, -6, 0.5, -6)
+    local goalFillSize = UDim2.new(alpha, 0, 1, 0)
+
+    speedValueLabel.Text = tostring(speedValue)
+
+    if immediate then
+        speedKnob.Position = goalKnobPos
+        speedFill.Size = goalFillSize
+    else
+        local ti = TweenInfo.new(0.12, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+        TweenService:Create(speedKnob, ti, { Position = goalKnobPos }):Play()
+        TweenService:Create(speedFill, ti, { Size = goalFillSize }):Play()
+    end
 end
 
-setSliderFromAlpha(0)
+-- Инициализируем визуал на основе ТЕКУЩЕГО значения speedValue
+setSpeedVisual(true)
 
-sliderFrame.InputBegan:Connect(function(input)
+local function updateSpeedFromX(x)
+    local absPos = speedTrack.AbsolutePosition
+    local absSize = speedTrack.AbsoluteSize
+    local rel = (x - absPos.X) / math.max(absSize.X, 1)
+    rel = math.clamp(rel, 0, 1)
+
+    speedValue = math.floor(rel * maxSpeed + 0.5)
+    speedEnabled = (speedValue ~= 0)
+    setSpeedVisual(false)
+    applySpeed()
+end
+
+speedTrack.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        local rel = input.Position.X - sliderLine.AbsolutePosition.X
-        local alpha = rel / sliderLine.AbsoluteSize.X
-        setSliderFromAlpha(alpha)
-        sliderDragging = true
+        draggingSpeed = true
+        updateSpeedFromX(input.Position.X)
     end
 end)
 
-sliderFrame.InputEnded:Connect(function(input)
+speedKnob.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        sliderDragging = false
+        draggingSpeed = true
     end
 end)
 
 UIS.InputChanged:Connect(function(input)
-    if sliderDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local rel = input.Position.X - sliderLine.AbsolutePosition.X
-        local alpha = rel / sliderLine.AbsoluteSize.X
-        setSliderFromAlpha(alpha)
+    if draggingSpeed and input.UserInputType == Enum.UserInputType.MouseMovement then
+        updateSpeedFromX(input.Position.X)
+    end
+end)
+
+UIS.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        draggingSpeed = false
     end
 end)
 
