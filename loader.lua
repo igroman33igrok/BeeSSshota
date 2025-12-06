@@ -8,7 +8,7 @@ local MAIN_SCRIPT_URL  = "https://raw.githubusercontent.com/igroman33igrok/BeeSS
 local CHECK_BASE_URL   = "https://bee-key-bot.onrender.com/check?key="
 
 -- >>> СЮДА ВСТАВЬ СВОЮ ССЫЛКУ НА RECUT <<<
-local KEY_LINK = "https://go.linkify.ru/2EO5"
+local KEY_LINK = "https://link-center.net/1457865/OjRav1ogUn9l"
 
 local HttpService = game:GetService("HttpService")
 local StarterGui  = game:GetService("StarterGui")
