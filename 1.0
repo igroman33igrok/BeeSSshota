@@ -590,6 +590,114 @@ closeBtn.MouseButton1Click:Connect(function()
     gui:Destroy()
 end)
 
+-- ================== СВЁРНУТОЕ КРУГЛОЕ МЕНЮ ==================
+
+local isMinimized = false
+
+-- Кружок, который остаётся на экране после сворачивания
+local minCircle = create("TextButton", {
+    Name = "BeeSSshota_MiniCircle",
+    Size = UDim2.new(0, 46, 0, 46),
+    Position = UDim2.new(0, 20, 0.5, -23),
+    BackgroundColor3 = Color3.fromRGB(20, 24, 50),
+    BorderSizePixel = 0,
+    Text = "BS",
+    Font = Enum.Font.GothamBold,
+    TextSize = 16,
+    TextColor3 = Color3.fromRGB(230, 235, 255),
+    AutoButtonColor = false,
+    Visible = false, -- изначально кружок скрыт, видно только основное окно
+    Active = true,   -- важно для тача
+}, gui)
+
+create("UICorner", {
+    CornerRadius = UDim.new(1, 0)
+}, minCircle)
+
+create("UIStroke", {
+    Thickness = 2,
+    Color = Color3.fromRGB(90, 120, 220),
+    Transparency = 0.2
+}, minCircle)
+
+-- Функции показать/спрятать основное окно
+local function showMain()
+    isMinimized = false
+    mainFrame.Visible = true
+    shadow.Visible = true
+    minCircle.Visible = false
+end
+
+local function hideMain()
+    isMinimized = true
+    mainFrame.Visible = false
+    shadow.Visible = false
+    minCircle.Visible = true
+end
+
+-- Кнопка "стрелочка" сворачивает/разворачивает
+collapseBtn.MouseButton1Click:Connect(function()
+    if isMinimized then
+        showMain()
+    else
+        hideMain()
+    end
+end)
+
+-- Нажатие по кружку (один тап) — разворачивает
+minCircle.MouseButton1Click:Connect(function()
+    if isMinimized then
+        showMain()
+    end
+end)
+
+-- ============ ПЕРЕТАСКИВАНИЕ КРУЖКА (МЫШЬ + ТЕЛЕФОН) ============
+
+local dragging = false
+local dragInput
+local dragStart
+local startPos
+
+local function updateMiniCircle(input)
+    local delta = input.Position - dragStart
+    minCircle.Position = UDim2.new(
+        startPos.X.Scale,
+        startPos.X.Offset + delta.X,
+        startPos.Y.Scale,
+        startPos.Y.Offset + delta.Y
+    )
+end
+
+minCircle.InputBegan:Connect(function(input)
+    -- Срабатывает и на ПК (MouseButton1), и на телефоне (Touch)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+
+        dragging = true
+        dragStart = input.Position
+        startPos = minCircle.Position
+
+        -- Когда палец/мышь отпущены — прекращаем перетаскивание
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+UIS.InputChanged:Connect(function(input)
+    if not dragging then return end
+
+    -- Двигаем и при движении мыши, и при движении пальца
+    if input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch then
+
+        updateMiniCircle(input)
+    end
+end)
+-- ================== КОНЕЦ БЛОКА КРУЖКА ==================
+
 ---------------------- ПРАВАЯ ОБЛАСТЬ ---------------------
 
 local contentFrame = create("Frame", {
@@ -1104,120 +1212,6 @@ UIS.InputChanged:Connect(function(input)
         )
         lastWindowPos = mainFrame.Position
         updateShadow()
-    end
-end)
-
----------------------- СВОРАЧИВАНИЕ В КРУЖОК ---------------
-
-local bubble = create("TextButton", {
-    Name = "BeeSSshota_Bubble",
-    Parent = gui,
-    Size = UDim2.new(0, 48, 0, 48),
-    Position = UDim2.new(0.5, 0, 0.5, 0),
-    BackgroundColor3 = Color3.fromRGB(80, 100, 255),
-    BorderSizePixel = 0,
-    Text = "≡",
-    Font = Enum.Font.GothamBold,
-    TextSize = 24,
-    TextColor3 = Color3.fromRGB(255, 255, 255),
-    AutoButtonColor = true,
-    Visible = false,
-})
-create("UICorner", { CornerRadius = UDim.new(1, 0) }, bubble)
-create("UIStroke", {
-    Color = Color3.fromRGB(180, 200, 255),
-    Thickness = 1.5,
-}, bubble)
-
-local collapsed = false
-local bubblePressed = false
-local bubbleDragging = false
-local bubbleDragStart, bubbleStartPos
-
-local function showBubble()
-    bubble.Position = lastWindowPos + UDim2.new(0, MAIN_W - 40, 0, -20)
-    bubble.Visible  = true
-end
-
-local function hideBubble()
-    bubble.Visible = false
-end
-
-collapseBtn.MouseButton1Click:Connect(function()
-    if not collapsed then
-        collapsed = true
-        lastWindowPos = mainFrame.Position
-
-        local ti = TweenInfo.new(0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-        TweenService:Create(mainFrame, ti, {BackgroundTransparency = 1}):Play()
-        TweenService:Create(shadow, ti, {ImageTransparency = 1}):Play()
-
-        task.delay(0.2, function()
-            mainFrame.Visible = false
-            shadow.Visible    = false
-            showBubble()
-        end)
-    else
-        collapsed = false
-        hideBubble()
-        mainFrame.Visible = true
-        shadow.Visible    = true
-        mainFrame.Position = lastWindowPos
-
-        mainFrame.BackgroundTransparency = 1
-        shadow.ImageTransparency = 1
-        local ti = TweenInfo.new(0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-        TweenService:Create(mainFrame, ti, {BackgroundTransparency = 0}):Play()
-        TweenService:Create(shadow, ti, {ImageTransparency = 0.55}):Play()
-        updateShadow()
-    end
-end)
-
-bubble.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        bubblePressed   = true
-        bubbleDragging  = false
-        bubbleDragStart = input.Position
-        bubbleStartPos  = bubble.Position
-    end
-end)
-
-bubble.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        if bubblePressed and not bubbleDragging then
-            -- это клик, а не перетаскивание
-            if collapsed then
-                collapsed = false
-                hideBubble()
-                mainFrame.Visible = true
-                shadow.Visible    = true
-                mainFrame.Position = lastWindowPos
-
-                mainFrame.BackgroundTransparency = 1
-                shadow.ImageTransparency = 1
-                local ti = TweenInfo.new(0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-                TweenService:Create(mainFrame, ti, {BackgroundTransparency = 0}):Play()
-                TweenService:Create(shadow, ti, {ImageTransparency = 0.55}):Play()
-                updateShadow()
-            end
-        end
-        bubblePressed  = false
-        bubbleDragging = false
-    end
-end)
-
-UIS.InputChanged:Connect(function(input)
-    if bubblePressed and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local delta = input.Position - bubbleDragStart
-        if delta.Magnitude > 5 then
-            bubbleDragging = true
-        end
-        if bubbleDragging then
-            bubble.Position = UDim2.new(
-                bubbleStartPos.X.Scale, bubbleStartPos.X.Offset + delta.X,
-                bubbleStartPos.Y.Scale, bubbleStartPos.Y.Offset + delta.Y
-            )
-        end
     end
 end)
 
