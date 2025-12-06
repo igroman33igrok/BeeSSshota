@@ -2,11 +2,17 @@
 -- 1) Показывает окно ввода ключа
 -- 2) Отправляет ключ на https://bee-key-bot.onrender.com/check?key=...
 -- 3) Если ответ строго "OK" — загружает основной скрипт 1.0
+-- 4) Кнопка "Получить ключ" копирует ссылку на Recut (переход к твоему боту)
 
 local MAIN_SCRIPT_URL  = "https://raw.githubusercontent.com/igroman33igrok/BeeSSshota/refs/heads/main/1.0"
 local CHECK_BASE_URL   = "https://bee-key-bot.onrender.com/check?key="
 
+-- >>> СЮДА ВСТАВЬ СВОЮ ССЫЛКУ НА RECUT <<<
+local KEY_LINK = "https://go.linkify.ru/2EO5"
+
 local HttpService = game:GetService("HttpService")
+local StarterGui  = game:GetService("StarterGui")
+local UIS         = game:GetService("UserInputService")
 
 -- ================== ХЕЛПЕРЫ ==================
 
@@ -20,9 +26,6 @@ local function httpGet(url)
     end
     return res
 end
-
-local StarterGui = game:GetService("StarterGui")
-local UIS        = game:GetService("UserInputService")
 
 local function notify(msg)
     pcall(function()
@@ -56,8 +59,8 @@ gui.IgnoreGuiInset = true
 gui.Parent = parentGui
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 260, 0, 150)
-frame.Position = UDim2.new(0.5, -130, 0.5, -75)
+frame.Size = UDim2.new(0, 260, 0, 190) -- было 150, увеличил высоту под вторую кнопку
+frame.Position = UDim2.new(0.5, -130, 0.5, -95)
 frame.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
 frame.BorderSizePixel = 0
 frame.Parent = gui
@@ -91,20 +94,36 @@ local boxCorner = Instance.new("UICorner")
 boxCorner.CornerRadius = UDim.new(0, 6)
 boxCorner.Parent = box
 
-local btn = Instance.new("TextButton")
-btn.Size = UDim2.new(1, -20, 0, 30)
-btn.Position = UDim2.new(0, 10, 0, 95)
-btn.BackgroundColor3 = Color3.fromRGB(60, 80, 200)
-btn.Font = Enum.Font.GothamBold
-btn.TextSize = 14
-btn.TextColor3 = Color3.fromRGB(240, 240, 255)
-btn.Text = "Активировать"
-btn.AutoButtonColor = true
-btn.Parent = frame
+local activateBtn = Instance.new("TextButton")
+activateBtn.Size = UDim2.new(1, -20, 0, 30)
+activateBtn.Position = UDim2.new(0, 10, 0, 95)
+activateBtn.BackgroundColor3 = Color3.fromRGB(60, 80, 200)
+activateBtn.Font = Enum.Font.GothamBold
+activateBtn.TextSize = 14
+activateBtn.TextColor3 = Color3.fromRGB(240, 240, 255)
+activateBtn.Text = "Активировать"
+activateBtn.AutoButtonColor = true
+activateBtn.Parent = frame
 
-local btnCorner = Instance.new("UICorner")
-btnCorner.CornerRadius = UDim.new(0, 6)
-btnCorner.Parent = btn
+local activateBtnCorner = Instance.new("UICorner")
+activateBtnCorner.CornerRadius = UDim.new(0, 6)
+activateBtnCorner.Parent = activateBtn
+
+-- Новая кнопка "Получить ключ"
+local getKeyBtn = Instance.new("TextButton")
+getKeyBtn.Size = UDim2.new(1, -20, 0, 30)
+getKeyBtn.Position = UDim2.new(0, 10, 0, 135)
+getKeyBtn.BackgroundColor3 = Color3.fromRGB(40, 120, 80)
+getKeyBtn.Font = Enum.Font.GothamBold
+getKeyBtn.TextSize = 14
+getKeyBtn.TextColor3 = Color3.fromRGB(240, 240, 255)
+getKeyBtn.Text = "Получить ключ"
+getKeyBtn.AutoButtonColor = true
+getKeyBtn.Parent = frame
+
+local getKeyBtnCorner = Instance.new("UICorner")
+getKeyBtnCorner.CornerRadius = UDim.new(0, 6)
+getKeyBtnCorner.Parent = getKeyBtn
 
 -- Перетаскивание окна
 local dragging = false
@@ -146,7 +165,6 @@ local function tryActivate()
 
     notify("Проверяю ключ...")
 
-    -- добавим UrlEncode, на всякий
     local url = CHECK_BASE_URL .. HttpService:UrlEncode(key)
     local resp = httpGet(url)
     if not resp then
@@ -154,7 +172,6 @@ local function tryActivate()
         return
     end
 
-    -- жёсткая проверка: только если ответ ровно "OK" (без пробелов/переносов)
     local clean = resp:gsub("%s+", ""):upper()
     if clean ~= "OK" then
         notify("Неверный или устаревший ключ")
@@ -181,10 +198,28 @@ local function tryActivate()
     fn()
 end
 
-btn.MouseButton1Click:Connect(tryActivate)
+activateBtn.MouseButton1Click:Connect(tryActivate)
 
 box.FocusLost:Connect(function(enterPressed)
     if enterPressed then
         tryActivate()
     end
 end)
+
+-- ================== КНОПКА "ПОЛУЧИТЬ КЛЮЧ" ==================
+
+local function copyKeyLink()
+    if not KEY_LINK or KEY_LINK == "" then
+        notify("Ссылка для получения ключа не настроена.")
+        return
+    end
+
+    if setclipboard then
+        setclipboard(KEY_LINK)
+        notify("Ссылка скопирована в буфер обмена")
+    else
+        notify("Ваш эксплойт не поддерживает копирование.\nСсылка:\n" .. KEY_LINK)
+    end
+end
+
+getKeyBtn.MouseButton1Click:Connect(copyKeyLink)
