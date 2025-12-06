@@ -25,12 +25,17 @@ local collectiblesName = "Collectibles"
 
 ---------------------- СЕРВИСЫ ----------------------------
 
-local Players      = game:GetService("Players")
+local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
-local UIS          = game:GetService("UserInputService")
-local StarterGui   = game:GetService("StarterGui")
+local UIS = game:GetService("UserInputService")
+local StarterGui = game:GetService("StarterGui")
+local lp = Players.LocalPlayer
 
-local lp           = Players.LocalPlayer
+-- для анти-АФК
+local VirtualUser
+pcall(function()
+    VirtualUser = game:GetService("VirtualUser")
+end)
 
 ---------------------- ХЕЛПЕРЫ ----------------------------
 
@@ -254,6 +259,31 @@ lp.CharacterAdded:Connect(function()
     task.wait(1)
     updateHumanoid()
 end)
+
+---------------------- АНТИ-АФК ---------------------------
+local antiAfkEnabled = false
+local antiAfkConn = nil
+
+local function setAntiAfk(on)
+    on = on and true or false
+    antiAfkEnabled = on
+
+    if antiAfkConn then
+        antiAfkConn:Disconnect()
+        antiAfkConn = nil
+    end
+
+    if antiAfkEnabled and lp and VirtualUser then
+        antiAfkConn = lp.Idled:Connect(function()
+            if not antiAfkEnabled then return end
+            pcall(function()
+                VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera and workspace.CurrentCamera.CFrame or CFrame.new())
+                task.wait(0.1)
+                VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera and workspace.CurrentCamera.CFrame or CFrame.new())
+            end)
+        end)
+    end
+end
 
 -------------------------- UI БАЗА ------------------------
 
@@ -482,6 +512,7 @@ create("UICorner", { CornerRadius = UDim.new(0, 8) }, closeBtn)
 
 closeBtn.MouseButton1Click:Connect(function()
     disconnectListener()
+    setAntiAfk(false)
     gui:Destroy()
 end)
 
@@ -657,7 +688,8 @@ end
 
 updateStatusLabel()
 
--- ПАНЕЛЬ: ИГРОК (СПИДХАК)
+----------------- ПАНЕЛЬ: ИГРОК (СПИДХАК) ---------------
+
 local playerPanel = create("Frame", {
     Size = UDim2.new(1, -20, 1, -20),
     Position = UDim2.new(0, 10, 0, 10),
@@ -762,7 +794,8 @@ UIS.InputChanged:Connect(function(input)
     end
 end)
 
--- ПАНЕЛЬ: НАСТРОЙКИ
+---------------- ПАНЕЛЬ: НАСТРОЙКИ ------------------
+
 local settingsPanel = create("Frame", {
     Size = UDim2.new(1, -20, 1, -20),
     Position = UDim2.new(0, 10, 0, 10),
@@ -788,13 +821,14 @@ local settingsSub = create("TextLabel", {
     Position = UDim2.new(0, 10, 0, 26),
     BackgroundTransparency = 1,
     Font = Enum.Font.Gotham,
-    Text = "Кнопка ниже скопирует ссылку на твой Telegram-канал\nв буфер обмена и покажет уведомление.",
+    Text = "Кнопка ниже скопирует ссылку на твой Telegram-канал,\nа также можно включить анти-АФК.",
     TextSize = 12,
     TextColor3 = Color3.fromRGB(160, 165, 210),
     TextXAlignment = Enum.TextXAlignment.Left,
     TextYAlignment = Enum.TextYAlignment.Top,
 }, settingsPanel)
 
+-- Кнопка "Скопировать ссылку"
 local copyBtn = create("TextButton", {
     Size = UDim2.new(0, 260, 0, 30),
     Position = UDim2.new(0, 10, 0, 70),
@@ -810,6 +844,93 @@ create("UICorner", { CornerRadius = UDim.new(0, 8) }, copyBtn)
 
 copyBtn.MouseButton1Click:Connect(function()
     copyToClipboard(TELEGRAM_LINK)
+end)
+
+----------------- Блок "Анти-АФК" ------------------
+
+local antiAfkLabel = create("TextLabel", {
+    Size = UDim2.new(1, -20, 0, 20),
+    Position = UDim2.new(0, 10, 0, 110),
+    BackgroundTransparency = 1,
+    Font = Enum.Font.Gotham,
+    Text = "Анти-АФК (антивыкидывание за бездействие)",
+    TextSize = 13,
+    TextColor3 = Color3.fromRGB(220, 225, 255),
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, settingsPanel)
+
+local antiAfkRow = create("Frame", {
+    Size = UDim2.new(0, 160, 0, 26),
+    Position = UDim2.new(0, 10, 0, 135),
+    BackgroundTransparency = 1,
+}, settingsPanel)
+
+local antiAfkToggleBtn = create("TextButton", {
+    Size = UDim2.new(0, 80, 0, 22),
+    Position = UDim2.new(0, 0, 0, 2),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    AutoButtonColor = false,
+    Text = "",
+}, antiAfkRow)
+
+local antiAfkTrack = create("Frame", {
+    Size = UDim2.new(1, 0, 1, 0),
+    BackgroundColor3 = Color3.fromRGB(60, 70, 100),
+    BorderSizePixel = 0,
+}, antiAfkToggleBtn)
+create("UICorner", { CornerRadius = UDim.new(1, 0) }, antiAfkTrack)
+
+local antiAfkKnob = create("Frame", {
+    Size = UDim2.new(0, 18, 1, -4),
+    Position = UDim2.new(0, 3, 0, 2),
+    BackgroundColor3 = Color3.fromRGB(235, 238, 255),
+    BorderSizePixel = 0,
+}, antiAfkTrack)
+create("UICorner", { CornerRadius = UDim.new(1, 0) }, antiAfkKnob)
+
+local antiAfkOn = false
+
+local function setAntiAfkVisual(immediate)
+    local goalTrackColor = antiAfkOn and Color3.fromRGB(90, 180, 120) or Color3.fromRGB(60, 70, 100)
+    local goalKnobPos = antiAfkOn and UDim2.new(1, -21, 0, 2) or UDim2.new(0, 3, 0, 2)
+
+    if immediate then
+        antiAfkTrack.BackgroundColor3 = goalTrackColor
+        antiAfkKnob.Position = goalKnobPos
+    else
+        local ti = TweenInfo.new(0.18, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+        TweenService:Create(antiAfkTrack, ti, { BackgroundColor3 = goalTrackColor }):Play()
+        TweenService:Create(antiAfkKnob, ti, { Position = goalKnobPos }):Play()
+    end
+end
+
+setAntiAfkVisual(true)
+
+antiAfkToggleBtn.MouseEnter:Connect(function()
+    local ti = TweenInfo.new(0.12, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+    local col = antiAfkOn and Color3.fromRGB(105, 195, 140) or Color3.fromRGB(80, 90, 120)
+    TweenService:Create(antiAfkTrack, ti, { BackgroundColor3 = col }):Play()
+end)
+
+antiAfkToggleBtn.MouseLeave:Connect(function()
+    setAntiAfkVisual(false)
+end)
+
+antiAfkToggleBtn.MouseButton1Down:Connect(function()
+    local ti = TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+    TweenService:Create(antiAfkKnob, ti, { Size = UDim2.new(0, 16, 1, -6) }):Play()
+end)
+
+antiAfkToggleBtn.MouseButton1Up:Connect(function()
+    local ti = TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+    TweenService:Create(antiAfkKnob, ti, { Size = UDim2.new(0, 18, 1, -4) }):Play()
+end)
+
+antiAfkToggleBtn.MouseButton1Click:Connect(function()
+    antiAfkOn = not antiAfkOn
+    setAntiAfk(antiAfkOn)
+    setAntiAfkVisual(false)
 end)
 
 ---------------------- ПЕРЕКЛЮЧЕНИЕ ПАНЕЛЕЙ ---------------
