@@ -1,10 +1,12 @@
 -- BeeSSshota Key Loader (через Telegram-бот/Render)
 -- 1) Показывает окно ввода ключа
 -- 2) Отправляет ключ на https://bee-key-bot.onrender.com/check?key=...
--- 3) Если ответ "OK" — загружает основной скрипт 1.0
+-- 3) Если ответ строго "OK" — загружает основной скрипт 1.0
 
 local MAIN_SCRIPT_URL  = "https://raw.githubusercontent.com/igroman33igrok/BeeSSshota/refs/heads/main/1.0"
 local CHECK_BASE_URL   = "https://bee-key-bot.onrender.com/check?key="
+
+local HttpService = game:GetService("HttpService")
 
 -- ================== ХЕЛПЕРЫ ==================
 
@@ -19,7 +21,6 @@ local function httpGet(url)
     return res
 end
 
-local Players    = game:GetService("Players")
 local StarterGui = game:GetService("StarterGui")
 local UIS        = game:GetService("UserInputService")
 
@@ -145,13 +146,17 @@ local function tryActivate()
 
     notify("Проверяю ключ...")
 
-    local resp = httpGet(CHECK_BASE_URL .. key)
+    -- добавим UrlEncode, на всякий
+    local url = CHECK_BASE_URL .. HttpService:UrlEncode(key)
+    local resp = httpGet(url)
     if not resp then
         notify("Не удалось связаться с сервером. Попробуй ещё раз.")
         return
     end
 
-    if not resp:find("OK") then
+    -- жёсткая проверка: только если ответ ровно "OK" (без пробелов/переносов)
+    local clean = resp:gsub("%s+", ""):upper()
+    if clean ~= "OK" then
         notify("Неверный или устаревший ключ")
         return
     end
