@@ -177,19 +177,10 @@ local function setTypeEnabled(tokenKey, on)
     enabledTypes[tokenKey] = on and true or false
 
     if anyTypeEnabled() then
+        -- Подписываемся на появление НОВЫХ токенов
         connectListener()
-        if ensureCollectibles() then
-            task.spawn(function()
-                for _, token in ipairs(collectibles:GetChildren()) do
-                    if not enabledTypes[tokenKey] then break end
-                    local tType = getTokenType(token)
-                    if tType == tokenKey then
-                        teleportToToken(token, tType)
-                        break
-                    end
-                end
-            end)
-        end
+        -- ВАЖНО: больше НЕ сканируем уже существующие токены,
+        -- чтобы не тпшиться к одноразовым / старым токенам.
     else
         disconnectListener()
     end
