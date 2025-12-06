@@ -591,7 +591,6 @@ closeBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ================== СВЁРНУТОЕ КРУГЛОЕ МЕНЮ ==================
-
 local isMinimized = false
 
 -- Кружок, который остаётся на экране после сворачивания
@@ -606,8 +605,8 @@ local minCircle = create("TextButton", {
     TextSize = 16,
     TextColor3 = Color3.fromRGB(230, 235, 255),
     AutoButtonColor = false,
-    Visible = false, -- изначально кружок скрыт, видно только основное окно
-    Active = true,   -- важно для тача
+    Visible = false, -- по умолчанию скрыт
+    Active = true,
 }, gui)
 
 create("UICorner", {
@@ -644,22 +643,17 @@ collapseBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Нажатие по кружку (один тап) — разворачивает
-minCircle.MouseButton1Click:Connect(function()
-    if isMinimized then
-        showMain()
-    end
-end)
-
--- ============ ПЕРЕТАСКИВАНИЕ КРУЖКА (МЫШЬ + ТЕЛЕФОН) ============
-
+-- ============ ПЕРЕТАСКИВАНИЕ + ТАП (МЫШЬ + ТЕЛЕФОН) ============
 local dragging = false
-local dragInput
 local dragStart
 local startPos
+local totalDelta = 0
+local CLICK_THRESHOLD = 8 -- пикселей: меньше = считаем тапом
 
 local function updateMiniCircle(input)
     local delta = input.Position - dragStart
+    totalDelta = totalDelta + math.abs(delta.X) + math.abs(delta.Y)
+
     minCircle.Position = UDim2.new(
         startPos.X.Scale,
         startPos.X.Offset + delta.X,
@@ -669,18 +663,25 @@ local function updateMiniCircle(input)
 end
 
 minCircle.InputBegan:Connect(function(input)
-    -- Срабатывает и на ПК (MouseButton1), и на телефоне (Touch)
     if input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch then
 
         dragging = true
         dragStart = input.Position
         startPos = minCircle.Position
+        totalDelta = 0
 
-        -- Когда палец/мышь отпущены — прекращаем перетаскивание
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
+                -- тач/клик закончился
+                if dragging then
+                    dragging = false
+
+                    -- если почти не двигали — считаем, что это тап
+                    if totalDelta < CLICK_THRESHOLD and isMinimized then
+                        showMain()
+                    end
+                end
             end
         end)
     end
@@ -689,7 +690,6 @@ end)
 UIS.InputChanged:Connect(function(input)
     if not dragging then return end
 
-    -- Двигаем и при движении мыши, и при движении пальца
     if input.UserInputType == Enum.UserInputType.MouseMovement
         or input.UserInputType == Enum.UserInputType.Touch then
 
